@@ -8,7 +8,7 @@ class Capistrano::Git < Capistrano::SCM
   #
   def git(*args)
     args.unshift :git
-    context.execute *args
+    context.execute(*args)
   end
 
   # The Capistrano default strategy for git. You should want to use this.
@@ -22,15 +22,24 @@ class Capistrano::Git < Capistrano::SCM
     end
 
     def clone
-      git :clone, '--mirror', repo_url, repo_path
+      if (depth = fetch(:git_shallow_clone))
+        git :clone, '--mirror', '--depth', depth, '--no-single-branch', repo_url, repo_path
+      else
+        git :clone, '--mirror', repo_url, repo_path
+      end
     end
 
     def update
-      git :remote, :update
+      # Note: Requires git version 1.9 or greater
+      if (depth = fetch(:git_shallow_clone))
+        git :fetch, '--depth', depth, 'origin', fetch(:branch)
+      else
+        git :remote, :update
+      end
     end
 
     def release
-      if tree = fetch(:repo_tree)
+      if (tree = fetch(:repo_tree))
         tree = tree.slice %r#^/?(.*?)/?$#, 1
         components = tree.split('/').size
         git :archive, fetch(:branch), tree, "| tar -x --strip-components #{components} -f - -C", release_path
@@ -40,7 +49,7 @@ class Capistrano::Git < Capistrano::SCM
     end
 
     def fetch_revision
-      context.capture(:git, "rev-list --max-count=1 --abbrev-commit #{fetch(:branch)}")
+      context.capture(:git, "rev-list --max-count=1 --abbrev-commit --abbrev=12 #{fetch(:branch)}")
     end
   end
 end

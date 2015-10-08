@@ -4,6 +4,8 @@ require_relative 'configuration/server'
 require_relative 'configuration/servers'
 
 module Capistrano
+  class ValidationError < Exception; end
+
   class Configuration
 
     def initialize(config = nil)
@@ -23,12 +25,13 @@ module Capistrano
       set(key, question)
     end
 
-    def set(key, value)
-      config[key] = value
+    def set(key, value=nil, &block)
+      invoke_validations(key, value, &block)
+      config[key] = block || value
     end
 
-    def set_if_empty(key, value)
-      config[key] = value unless config.has_key? key
+    def set_if_empty(key, value=nil, &block)
+      set(key, value, &block) unless config.has_key? key
     end
 
     def delete(key)
@@ -41,6 +44,12 @@ module Capistrano
         value = set(key, value.call)
       end
       return value
+    end
+
+    def validate(key, &validator)
+      vs = (validators[key] || [])
+      vs << validator
+      validators[key] = vs
     end
 
     def keys
@@ -100,6 +109,8 @@ module Capistrano
       @filters << Filter.new(:role, ENV['ROLES']) if ENV['ROLES']
       @filters << Filter.new(:host, ENV['HOSTS']) if ENV['HOSTS']
       fh = fetch_for(:filter,{}) || {}
+      @filters << Filter.new(:host, fh[:hosts]) if fh[:hosts]
+      @filters << Filter.new(:role, fh[:roles]) if fh[:roles]
       @filters << Filter.new(:host, fh[:host]) if fh[:host]
       @filters << Filter.new(:role, fh[:role]) if fh[:role]
     end
@@ -127,6 +138,10 @@ module Capistrano
       @config ||= Hash.new
     end
 
+    def validators
+      @validators ||= Hash.new
+    end
+
     def fetch_for(key, default, &block)
       if block_given?
         config.fetch(key, &block)
@@ -137,6 +152,18 @@ module Capistrano
 
     def callable_without_parameters?(x)
       x.respond_to?(:call) && ( !x.respond_to?(:arity) || x.arity == 0)
+    end
+
+    def invoke_validations(key, value, &block)
+      unless value.nil? or block.nil?
+        raise Capistrano::ValidationError.new("Value and block both passed to Configuration#set")
+      end
+      
+      return unless validators.has_key? key
+
+      validators[key].each do |validator|
+        validator.call(key, block || value)
+      end
     end
   end
 end

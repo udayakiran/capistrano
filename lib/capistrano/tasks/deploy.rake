@@ -59,7 +59,7 @@ namespace :deploy do
     desc 'Check directories of files to be linked exist in shared'
     task :make_linked_dirs do
       next unless any? :linked_files
-      on release_roles :all do |host|
+      on release_roles :all do |_host|
         execute :mkdir, '-p', linked_file_dirs(shared_path)
       end
     end
@@ -172,7 +172,7 @@ namespace :deploy do
   task :log_revision do
     on release_roles(:all) do
       within releases_path do
-        execute %{echo "#{revision_log_message}" >> #{revision_log}}
+        execute :echo, %{"#{revision_log_message}" >> #{revision_log}}
       end
     end
   end

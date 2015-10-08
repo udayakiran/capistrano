@@ -39,10 +39,20 @@ module Capistrano
 
     describe "#clone" do
       it "should run git clone" do
+        context.expects(:fetch).with(:git_shallow_clone).returns(nil)
+        context.expects(:repo_url).returns(:url)
+        context.expects(:repo_path).returns(:path)
+        context.expects(:execute).with(:git, :clone, '--mirror', :url, :path)
+
+        subject.clone
+      end
+
+      it "should run git clone in shallow mode" do
+        context.expects(:fetch).with(:git_shallow_clone).returns('1')
         context.expects(:repo_url).returns(:url)
         context.expects(:repo_path).returns(:path)
 
-        context.expects(:execute).with(:git, :clone, '--mirror', :url, :path)
+        context.expects(:execute).with(:git, :clone, '--mirror', "--depth", '1', '--no-single-branch', :url, :path)
 
         subject.clone
       end
@@ -50,7 +60,16 @@ module Capistrano
 
     describe "#update" do
       it "should run git update" do
+        context.expects(:fetch).with(:git_shallow_clone).returns(nil)
         context.expects(:execute).with(:git, :remote, :update)
+
+        subject.update
+      end
+
+      it "should run git update in shallow mode" do
+        context.expects(:fetch).with(:git_shallow_clone).returns('1')
+        context.expects(:fetch).with(:branch).returns(:branch)
+        context.expects(:execute).with(:git, :fetch, "--depth", '1', "origin",  :branch)
 
         subject.update
       end
@@ -75,6 +94,15 @@ module Capistrano
         context.expects(:execute).with(:git, :archive, :branch, 'tree', '| tar -x --strip-components 1 -f - -C', :path)
 
         subject.release
+      end
+    end
+
+    describe "#fetch_revision" do
+      it "should capture git rev-list" do
+        context.expects(:fetch).with(:branch).returns(:branch)
+        context.expects(:capture).with(:git, "rev-list --max-count=1 --abbrev-commit --abbrev=12 branch").returns("01abcde")
+        revision = subject.fetch_revision
+        expect(revision).to eq("01abcde")
       end
     end
   end
